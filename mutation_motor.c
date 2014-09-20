@@ -14,6 +14,8 @@
 #define FUNCTIONS_R_SUPPORTED 13
 #define MAX_LINE_OF_JUNK_ITER 50
 #define NUM_OPT_TO_JUNK       4
+#define MAX_WINDOW_SIZE       4
+
 /** END OF CONSTANTS **/
 
 /** PROTOTYPES **/
@@ -31,7 +33,7 @@ void code_transformer(int*,int*,int*);
 int replace_instruction(int,int);
 int replace_reg_instruction(int,int,int,int);
 void fill_with_junk(int*,int*,int*); 
-int change_order_instructions(int*,int*,int);
+void change_order_instructions(int*,int*,int);
 
 // Checkers //
 char is_type_r(int);
@@ -54,10 +56,15 @@ char is_r_supported(int);
 
 // Auxiliar Functions //
 
-// It's possible to define more conmutative functions, adding another or in the condition, it is used to change order of registers although the instruction 
-// have not got support in other functions of metamorph //
 char is_conmutative(char fcode){ if(fcode==0x20 || fcode==0x18 || fcode==0x25 || fcode==0x26 || fcode==0x24){ return 1; } return 0; }
 char have_usigned_instruction(char fcode){ if (fcode==0x20 || fcode==22){ return 1; } return 0; }
+char are_permutable(int instX,int instY){
+	if(is_type_r(instX) & is_type_r(instY)){
+		if(get_r_rd(instX) != get_r_rs(instY) && get_r_rd(instX) != get_r_rt(instY)) return 1;
+		else return 0;
+	}return 0;
+}
+void xor_cipher(int* instructions,int key,int num_inst){ for(unsigned volatile int i=0;i<num_inst;instructions[i++]^key); }
 void read_instructions(int* instructions,FILE* fd,int num_inst){ for(volatile unsigned int i=0x00;i<num_inst;fscanf(fd,"%i",instructions+(i++))); }
 void show_shellcode(int* inst,int length){ printf("\t\t\t    [----Shellcode----]\n\n");for(unsigned volatile int i=0;i<length;printf("\t\t\t\t0x%08x\n",inst[i++])); }
 // End of auxiliar functions //
@@ -68,7 +75,6 @@ char is_type_j(int inst){ return ((inst&0xFC000000)>>25)==1;}
 char is_type_i(int inst){ return !is_type_r(inst) && !is_type_r(inst); }
 // End of Checkers //
 
-// End of General Type Functions //
 
 // Type R Functions //
                                          // Property: signed -> (-1) unsigned, signed always are even and unsigned always are odd
@@ -155,10 +161,26 @@ void fill_with_junk(int* instructions,int* new_shellcode,int* num_inst){
 	
 // Initialise a window W with the number of instructions to check in a single iteration, and see if there are conflicts among instructions in a range |W| 
 // The index must have been incremented by |W| each iteration
-int change_order_instructions(int *instructions,int* new_shellcode,int num_inst){}
+void change_order_instructions(int *instructions,int* new_shellcode,int num_inst){
+	char num_window_size,make_changes;
+	int aux = 0x00;
+	for(unsigned volatile int i=0x00;i<num_inst;i++){ // Por cada instruccion
+		make_changes    	= rand() % 2;  // Random reordenar (1) no reordenar (0)
+		if(make_changes){ // Si hay que reordenar
+			num_window_size = rand() % MAX_WINDOW_SIZE; // Se calcula un tamaño de ventana
+			for(unsigned volatile int j=0x00;i+j<num_inst & j<num_window_size;j++){ // Mientras 
+				if(are_permutable(instructions[i+j],instructions[i+j+1])){
+					aux = instructions[i+j+1];
+					instructions[i+j+1] = instructions[i+j];
+					instructions[i+j]   = aux;
+					printf("\t\tReordered: 0x%08x by 0x%08x\n",instructions[i+j],instructions[i+j+1]);
+				}
+			}
+		}
+	}
+}
 
 // End of Stages of code transformation //
-
 
 // Stages of process //
 
@@ -209,6 +231,12 @@ void analyze_code(int* instructions,int* new_shellcode,int num_inst){
 // Shellcode has source code with reg and instruction transformation, instructions is filled with junk now, use it as aux //
 void code_transformer(int* instructions,int* new_shellcode,int* num_inst){
 	fill_with_junk(instructions,new_shellcode,num_inst);
+	printf("\n\n-------------------------------------------------\n\n");
+	change_order_instructions(instructions,new_shellcode,*num_inst);
+	printf("\n\n-------------------------------------------------\n\n");
+	// [ Add more layers to make transformations ] //
+	// ...
+	// [ End of applicated layers ] //
 }
 	
 // End of stage of process //
@@ -240,7 +268,6 @@ int main(int argc, char **argv)
 	printf("\n\n\t\t    ***[ End code transformer ]***\n\n");
 	// Add more layers   //
 	show_shellcode(instructions,num_instructions);
-	
 	free(instructions);
 	free(new_shellcode);
 	return 0;
